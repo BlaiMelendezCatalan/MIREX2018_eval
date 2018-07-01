@@ -1,0 +1,4 @@
+0.0	10.0	music
+10.0	40.0	no-music
+40.0	100.0	fg-music
+100.0	120.0	bg-music
