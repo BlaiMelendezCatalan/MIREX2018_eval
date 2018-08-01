@@ -55,26 +55,27 @@ def compute_file_statistics(args):
      eval_offset) = args
 
     seg_met = SegmentBasedMetrics(est_labels, time_resolution=time_resolution)
-    ev_met = EventBasedMetrics(est_labels,
-                               t_collar=t_collar,
-                               percentage_of_length=percentage_of_length,
-                               evaluate_onset=eval_onset,
-                               evaluate_offset=eval_offset)
-
     seg_met.evaluate(ref_event_list, est_event_list)
-    ev_met.evaluate(ref_event_list, est_event_list)
-    metrics = {'event_based': ev_met, 'segment_based': seg_met}
 
+    raw_res = seg_met.results()
     results = {}
-    results['segment_based'] = seg_met.results()
-    results['event_based'] = ev_met.results()
+    for l in ref_labels:
+        results[l] = {}
+        p = raw_res['class_wise'][l]['f_measure']['precision']
+        r = raw_res['class_wise'][l]['f_measure']['recall']
+        f = raw_res['class_wise'][l]['f_measure']['f_measure']
+        results[l]['precision'] = p
+        results[l]['recall'] = r
+        results[l]['f_measure'] = f
+    a = raw_res['overall']['accuracy']['accuracy']
+    results['overall'] = {'accuracy': a}
 
-    return (file_name, metrics, results)
+    return (file_name, seg_met, results)
 
 
 def get_stats_by_file(mp_results):
     stats_by_file = {}
-    for (file_name, metrics, file_res) in mp_results:
+    for (file_name, _, file_res) in mp_results:
         stats_by_file[file_name] = file_res
 
     return stats_by_file
@@ -89,46 +90,41 @@ def get_overall_intermediate_stats(mp_results, labels):
         mp_results (list): contains the results of the function
                            compute_file_statistics for all files in the
                            dataset.
-        labels (list): unique labels used in the estimation.
+        labels (list): unique labels used in the ground truth.
 
     Returns:
         stats_by_file (dict): contains the results for each file in the
                                 dataset.
-        overall_int_stats (dict): contains the aggregated intermediate statistics
+        overall_interm_stats (dict): contains the aggregated intermediate statistics
                           for the whole dataset.
     """
 
-    stats_by_file = {}
-    overall_int_stats = {}
-    overall_int_stats['segment_based'] = {}
-    overall_int_stats['event_based'] = {}
-    for (file_name, metrics, file_res) in mp_results:
-        stats_by_file[file_name] = file_res
-        for base in overall_int_stats.keys():
-            for label in labels:
-                if label not in overall_int_stats[base].keys():
-                    overall_int_stats[base][label] = {}
-                # Aggregate int_stats (tp, tn, fp, fn) for segment- and
-                # event-based class-wise stats for the whole dataset.
-                for stat in metrics[base].class_wise[label].keys():
-                    if stat not in overall_int_stats[base][label].keys():
-                        overall_int_stats[base][label][stat] = 0.
-                    overall_int_stats[base][label][
-                              stat] += metrics[base].class_wise[label][stat]
-            # Aggregate int_stats (tp, tn, fp, fn) for segment- and
-            # event-based overall stats for the whole dataset.
-            if 'overall' not in overall_int_stats[base].keys():
-                overall_int_stats[base]['overall'] = {}
-            for stat in metrics[base].overall.keys():
-                if stat not in overall_int_stats[base]['overall'].keys():
-                    overall_int_stats[base]['overall'][stat] = 0.
-                overall_int_stats[base]['overall'][
-                          stat] += metrics[base].overall[stat]
+    overall_interm_stats = {}
+    for (_, metrics, _) in mp_results:
+        for label in labels:
+            if label not in overall_interm_stats.keys():
+                overall_interm_stats[label] = {}
+            # Aggregate int_stats (tp, tn, fp, fn) for segment-based
+            # class-wise stats for the whole dataset.
+            for stat in metrics.class_wise[label].keys():
+                if stat not in overall_interm_stats[label].keys():
+                    overall_interm_stats[label][stat] = 0.
+                overall_interm_stats[label][stat] += metrics.class_wise[
+                                                                label][stat]
+        # Aggregate int_stats (tp, tn, fp, fn) for segment-based
+        # overall stats for the whole dataset.
+        if 'overall' not in overall_interm_stats.keys():
+            overall_interm_stats['overall'] = {}
+        for stat in metrics.overall.keys():
+            if stat not in overall_interm_stats['overall'].keys():
+                overall_interm_stats['overall'][stat] = 0.
+            overall_interm_stats['overall'][
+                      stat] += metrics.overall[stat]
 
-    return overall_int_stats
+    return overall_interm_stats
 
 
-def get_overall_stats(int_stats, base, label):
+def get_dataset_stats(int_stats, label):
     """
     Computes the final segment-based and event-based statistics for the whole
     dataset using the intermediate statistics.
@@ -145,42 +141,22 @@ def get_overall_stats(int_stats, base, label):
     """
 
     stats = {}
-    stats['precision'] = metric.precision(
-                            Ntp=int_stats['Ntp'],
-                            Nsys=int_stats['Nsys'])
-    stats['recall'] = metric.recall(
-                            Ntp=int_stats['Ntp'],
-                            Nref=int_stats['Nref'])
-    stats['f_measure'] = metric.f_measure(
-                            precision=stats['precision'],
-                            recall=stats['recall'])
-    if base == 'segment_based':
-        stats['sensitivity'] = metric.sensitivity(
+    if label != 'overall':
+        stats['precision'] = metric.precision(
+                                 Ntp=int_stats['Ntp'],
+                                 Nsys=int_stats['Nsys'])
+        stats['recall'] = metric.recall(
                                 Ntp=int_stats['Ntp'],
-                                Nfn=int_stats['Nfn'])
-        stats['specificity'] = metric.specificity(
+                                Nref=int_stats['Nref'])
+        stats['f_measure'] = metric.f_measure(
+                                precision=stats['precision'],
+                                recall=stats['recall'])
+    else:
+        stats['accuracy'] = metric.accuracy(
+                                Ntp=int_stats['Ntp'],
                                 Ntn=int_stats['Ntn'],
-                                Nfp=int_stats['Nfp'])
-        if label == 'overall':
-            stats['accuracy'] = metric.accuracy(
-                                        Ntp=int_stats['Ntp'],
-                                        Ntn=int_stats['Ntn'],
-                                        Nfp=int_stats['Nfp'],
-                                        Nfn=int_stats['Nfn'])
-    elif base == 'event_based':
-        stats['deletion_rate'] = metric.deletion_rate(
-                                    Nref=int_stats['Nref'],
-                                    Ndeletions=int_stats['Nfn'])
-        stats['insertion_rate'] = metric.insertion_rate(
-                                    Nref=int_stats['Nref'],
-                                    Ninsertions=int_stats['Nfp'])
-        stats['error_rate'] = metric.error_rate(
-                                deletion_rate_value=stats['deletion_rate'],
-                                insertion_rate_value=stats['insertion_rate'])
-        if label == 'overall':
-            stats['substitution_rate'] = metric.substitution_rate(
-                                    Nref=int_stats['Nref'],
-                                    Nsubstitutions=int_stats['Nsubs'])
+                                Nfp=int_stats['Nfp'],
+                                Nfn=int_stats['Nfn'])
 
     return stats
 
@@ -210,7 +186,7 @@ def compute_statistics(ref_dir, est_dir, time_resolution=0.001, t_collar=0.2,
         ncpus (int): Number of CPU to use.
 
     Returns:
-        overall_stats (dict): statistics of the whole dataset.
+        dataset_stats (dict): statistics of the whole dataset.
         stats_by_file (dict): statistics of each file.
     """
 
@@ -238,6 +214,10 @@ def compute_statistics(ref_dir, est_dir, time_resolution=0.001, t_collar=0.2,
     ref_labels = all_ref_events.unique_event_labels
     est_labels = all_est_events.unique_event_labels
 
+    for l in est_labels:
+        if l not in ref_labels:
+            raise ValueError("Ref-est class mismatch")
+
     for arg in args:
         arg.insert(0, ref_labels)
         arg.insert(1, est_labels)
@@ -245,15 +225,12 @@ def compute_statistics(ref_dir, est_dir, time_resolution=0.001, t_collar=0.2,
     mp_results = run_mp(compute_file_statistics, args, ncpus)
 
     stats_by_file = get_stats_by_file(mp_results)
-    overall_int_stats = get_overall_intermediate_stats(mp_results, est_labels)
+    overall_interm_stats = get_overall_intermediate_stats(mp_results,
+                                                          ref_labels)
 
-    overall_stats = {}
-    for base in overall_int_stats.keys():
-        overall_stats[base] = {}
-        for label in overall_int_stats[base].keys():
-            overall_stats[base][label] = get_overall_stats(
-                                            overall_int_stats[base][label],
-                                            base,
-                                            label)
+    dataset_stats = {}
+    for label in overall_interm_stats.keys():
+        dataset_stats[label] = get_dataset_stats(overall_interm_stats[label],
+                                                 label)
 
-    return overall_stats, stats_by_file
+    return dataset_stats, stats_by_file
