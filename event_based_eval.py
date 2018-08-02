@@ -54,23 +54,44 @@ def compute_file_statistics(args):
      eval_onset,
      eval_offset) = args
 
-    seg_met = SegmentBasedMetrics(est_labels, time_resolution=time_resolution)
-    seg_met.evaluate(ref_event_list, est_event_list)
+    ev_met = EventBasedMetrics(est_labels,
+                               t_collar=t_collar,
+                               percentage_of_length=percentage_of_length,
+                               evaluate_onset=eval_onset,
+                               evaluate_offset=eval_offset)
+    ev_met.evaluate(ref_event_list, est_event_list) 
 
-    raw_res = seg_met.results()
+    raw_res = ev_met.results()
     results = {}
     for l in ref_labels:
         results[l] = {}
         p = raw_res['class_wise'][l]['f_measure']['precision']
         r = raw_res['class_wise'][l]['f_measure']['recall']
         f = raw_res['class_wise'][l]['f_measure']['f_measure']
+        d = raw_res['class_wise'][l]['error_rate']['deletion_rate']
+        i = raw_res['class_wise'][l]['error_rate']['insertion_rate']
+        e = raw_res['class_wise'][l]['error_rate']['error_rate']
         results[l]['precision'] = p
         results[l]['recall'] = r
         results[l]['f_measure'] = f
-    a = raw_res['overall']['accuracy']['accuracy']
-    results['overall'] = {'accuracy': a}
+        results[l]['deletion_rate'] = d
+        results[l]['insertion_rate'] = i
+        results[l]['error_rate'] = e
+    p = raw_res['overall']['f_measure']['precision']
+    r = raw_res['overall']['f_measure']['recall']
+    f = raw_res['overall']['f_measure']['f_measure']
+    d = raw_res['overall']['error_rate']['deletion_rate']
+    i = raw_res['overall']['error_rate']['insertion_rate']
+    e = raw_res['overall']['error_rate']['error_rate']
+    results['overall'] = {}
+    results['overall']['precision'] = p
+    results['overall']['recall'] = r
+    results['overall']['f_measure'] = f
+    results['overall']['deletion_rate'] = d
+    results['overall']['insertion_rate'] = i
+    results['overall']['error_rate'] = e
 
-    return (file_name, seg_met, results)
+    return (file_name, ev_met, results)
 
 
 def get_files_stats(mp_results):
@@ -141,22 +162,24 @@ def get_dataset_stats(int_stats, label):
     """
 
     stats = {}
-    if label != 'overall':
-        stats['precision'] = metric.precision(
-                                 Ntp=int_stats['Ntp'],
-                                 Nsys=int_stats['Nsys'])
-        stats['recall'] = metric.recall(
-                                Ntp=int_stats['Ntp'],
-                                Nref=int_stats['Nref'])
-        stats['f_measure'] = metric.f_measure(
-                                precision=stats['precision'],
-                                recall=stats['recall'])
-    else:
-        stats['accuracy'] = metric.accuracy(
-                                Ntp=int_stats['Ntp'],
-                                Ntn=int_stats['Ntn'],
-                                Nfp=int_stats['Nfp'],
-                                Nfn=int_stats['Nfn'])
+    stats['precision'] = metric.precision(
+                            Ntp=int_stats['Ntp'],
+                            Nsys=int_stats['Nsys'])
+    stats['recall'] = metric.recall(
+                            Ntp=int_stats['Ntp'],
+                            Nref=int_stats['Nref'])
+    stats['f_measure'] = metric.f_measure(
+                            precision=stats['precision'],
+                            recall=stats['recall'])
+    stats['deletion_rate'] = metric.deletion_rate(
+                            Nref=int_stats['Nref'],
+                            Ndeletions=int_stats['Nfn'])
+    stats['insertion_rate'] = metric.insertion_rate(
+                            Nref=int_stats['Nref'],
+                            Ninsertions=int_stats['Nfp'])
+    stats['error_rate'] = metric.error_rate(
+                            deletion_rate_value=stats['deletion_rate'],
+                            insertion_rate_value=stats['insertion_rate'])
 
     return stats
 
