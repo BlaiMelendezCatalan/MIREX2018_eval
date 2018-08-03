@@ -1,12 +1,17 @@
 import os
 import numpy as np
 from dcase_util.containers import MetaDataContainer
-from sed_eval.sound_event import SegmentBasedMetrics, EventBasedMetrics
+from sed_eval.sound_event import EventBasedMetrics
 from sed_eval.io import load_event_list
 from sed_eval.util.event_list import unique_event_labels
 from sed_eval import metric
 from intervaltree import IntervalTree
 from mp_utils import run_mp
+
+
+EVAL_ONSET = True
+EVAL_OFFSET = True
+PERCENTAGE_OF_LENGTH = 0.
 
 
 def reducer(str1, str2):
@@ -33,14 +38,11 @@ def compute_file_statistics(args):
         args (list): necessary data. Supplied by run_mp function.
 
     Returns:
-        ref_file_name (str): name of the reference file. It shares the name
-                             with its corresponding wav file.
-        metrics (dict): contains the SegmentBasedMetrics and EventBasedMetrics
-                        objects, which include the intermediate statistics (tp,
-                        tn, fp, ...), for one file.
-        results (dict): contains the statistics for the segment-based and the
-                        event-based evaluation as well as the confusion matrix
-                        for one file.
+        file_name (str): name of the reference file. It shares the name
+                         with its corresponding wav file.
+        ev_met (dict): contains the EventBasedMetrics object, which include the
+                       intermediate statistics (tp, tn, fp, ...), for one file.
+        results (dict): contains the event-based statistics of one file.
     """
 
     (ref_labels,
@@ -48,17 +50,13 @@ def compute_file_statistics(args):
      ref_event_list,
      est_event_list,
      file_name,
-     time_resolution,
-     t_collar,
-     percentage_of_length,
-     eval_onset,
-     eval_offset) = args
+     t_collar) = args
 
     ev_met = EventBasedMetrics(est_labels,
                                t_collar=t_collar,
-                               percentage_of_length=percentage_of_length,
-                               evaluate_onset=eval_onset,
-                               evaluate_offset=eval_offset)
+                               percentage_of_length=PERCENTAGE_OF_LENGTH,
+                               evaluate_onset=EVAL_ONSET,
+                               evaluate_offset=EVAL_OFFSET)
     ev_met.evaluate(ref_event_list, est_event_list) 
 
     raw_res = ev_met.results()
@@ -147,18 +145,16 @@ def get_overall_intermediate_stats(mp_results, labels):
 
 def get_dataset_stats(int_stats, label):
     """
-    Computes the final segment-based and event-based statistics for the whole
-    dataset using the intermediate statistics.
+    Computes the final event-based statistics for the whole dataset using the
+    intermediate statistics.
 
     Args:
         int_stats (dict): intermediate statistics of the whole dataset.
-        base (str): the type of evaluation. Either segment_based or
-                    event_based.
-        label (str): one of the unique labels used in the estimation.
+        label (str): one of the unique labels used in the reference of
+                     'overall'.
 
     Returns:
-        stats (dict): final segment-based and event-based statistics for the
-                      whole dataset.
+        stats (dict): final event-based statistics for the whole dataset.
     """
 
     stats = {}
@@ -184,28 +180,16 @@ def get_dataset_stats(int_stats, label):
     return stats
 
 
-def compute_statistics(ref_dir, est_dir, time_resolution=0.001, t_collar=0.2,
-                       percentage_of_length=0.5, eval_onset=True,
-                       eval_offset=True, ncpus=1):
+def compute_statistics(ref_dir, est_dir, t_collar=0.5, ncpus=1):
     """
-    Computes statistics for the whole dataset and for each file as well as the
-    confusion matrix for the whole dataset.
+    Computes statistics for the whole dataset and for each file.
 
     Args:
         ref_dir (str): directory of the references.
         est_dir (str): directory of the estimations.
-        time_resolution (float): time interval used in the segment-basd
-                                 evaluation. The comparison between reference
-                                 and estimation is done by segments of this
-                                 length.
         t_collar (float): time interval used in the event-based evaluation.
                           estimated events are correct if they fall inside
                           a range specified by t_collar from a reference event.
-        percentage_of_length (float): percentage of the length within which the
-                                      estimated offset has to be in order to be
-                                      consider valid estimation (form sed_eval)
-        eval_onset (bool): Use onsets in the event-based evaluation.
-        eval_offset (bool): Use offets in the event-based evaluation.
         ncpus (int): Number of CPU to use.
 
     Returns:
@@ -228,11 +212,7 @@ def compute_statistics(ref_dir, est_dir, time_resolution=0.001, t_collar=0.2,
         args.append([ref_event_list,
                      est_event_list,
                      ref,
-                     time_resolution,
-                     t_collar,
-                     percentage_of_length,
-                     eval_onset,
-                     eval_offset])
+                     t_collar])
 
     ref_labels = all_ref_events.unique_event_labels
     est_labels = all_est_events.unique_event_labels
