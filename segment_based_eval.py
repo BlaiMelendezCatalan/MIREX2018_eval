@@ -1,12 +1,14 @@
 import os
 import numpy as np
-from dcase_util.containers import MetaDataContainer
+from dcase_util.containers import MetaDataContainer, MetaDataItem
 from sed_eval.sound_event import SegmentBasedMetrics
 from sed_eval.io import load_event_list
 from sed_eval.util.event_list import unique_event_labels
 from sed_eval import metric
 from intervaltree import IntervalTree
 from mp_utils import run_mp
+from librosa.core import load
+from tqdm import tqdm
 
 
 EVAL_ONSET = True
@@ -94,7 +96,6 @@ def get_overall_intermediate_stats(mp_results, labels):
         overall_interm_stats (dict): contains the aggregated intermediate statistics
                           for the whole dataset.
     """
-
     overall_interm_stats = {}
     for (_, metrics, _) in mp_results:
         for label in labels:
@@ -155,7 +156,33 @@ def get_dataset_stats(int_stats, label):
     return stats
 
 
-def compute_statistics(ref_dir, est_dir, ncpus=1):
+def fill_event_gaps(events, duration):
+    filled_events = MetaDataContainer()
+    if len(events) == 0:
+        filled_events.append(MetaDataItem({'onset': 0.0,
+                                           'offset': duration,
+                                           'event_label': '-'}))
+        return filled_events
+    sorted_events = sorted(events)
+    last_offset = 0.0
+    for i, e in enumerate(sorted_events):
+        if e.onset != last_offset:
+            filled_events.append(MetaDataItem({'onset': last_offset,
+                                               'offset': e.onset,
+                                               'event_label': '-'}))
+        filled_events.append(MetaDataItem({'onset': e.onset,
+                                           'offset': e.offset,
+                                           'event_label': e.event_label}))
+        if i == len(sorted_events) - 1 and e.offset != duration:
+            filled_events.append(MetaDataItem({'onset': e.offset,
+                                               'offset': duration,
+                                               'event_label': '-'}))
+        last_offset = e.offset
+
+    return filled_events
+
+
+def compute_statistics(ref_dir, est_dir, audio_dir, ncpus=1):
     """
     Computes statistics for the whole dataset and for each file.
 
@@ -174,11 +201,16 @@ def compute_statistics(ref_dir, est_dir, ncpus=1):
     all_ref_events = MetaDataContainer()
     all_est_events = MetaDataContainer()
     args = []
-    for ref, est in zip(ref_list, est_list):
+    for ref, est in tqdm(zip(ref_list, est_list)):
         assert ref == est, ("File names do not coincide."
                             "ref: %s, est: %s") % (ref, est)
         ref_event_list = load_event_list(os.path.join(ref_dir, ref))
         est_event_list = load_event_list(os.path.join(est_dir, est))
+        audio_path = os.path.join(audio_dir, ref.replace('.txt', '.wav'))
+        wav, sr = load(audio_path, sr=None)
+        duration = len(wav) / sr
+        ref_event_list = fill_event_gaps(ref_event_list, duration)
+        est_event_list = fill_event_gaps(est_event_list, duration)
         all_ref_events += ref_event_list
         all_est_events += est_event_list
         args.append([ref_event_list,
