@@ -10,7 +10,7 @@ from mp_utils import run_mp
 
 
 EVAL_ONSET = True
-EVAL_OFFSET = True
+EVAL_OFFSET = False
 PERCENTAGE_OF_LENGTH = 0.
 
 
@@ -50,13 +50,15 @@ def compute_file_statistics(args):
      ref_event_list,
      est_event_list,
      file_name,
-     t_collar) = args
+     t_collar,
+     eval_onset,
+     eval_offset) = args
 
     ev_met = EventBasedMetrics(est_labels,
                                t_collar=t_collar,
                                percentage_of_length=PERCENTAGE_OF_LENGTH,
-                               evaluate_onset=EVAL_ONSET,
-                               evaluate_offset=EVAL_OFFSET)
+                               evaluate_onset=eval_onset,
+                               evaluate_offset=eval_offset)
     ev_met.evaluate(ref_event_list, est_event_list) 
 
     raw_res = ev_met.results()
@@ -180,7 +182,8 @@ def get_dataset_stats(int_stats, label):
     return stats
 
 
-def compute_statistics(ref_dir, est_dir, t_collar=0.5, ncpus=1):
+def compute_statistics(ref_dir, est_dir, t_collar=0.5, eval_onset=EVAL_ONSET,
+                       eval_offset=EVAL_OFFSET, ncpus=1):
     """
     Computes statistics for the whole dataset and for each file.
 
@@ -212,7 +215,9 @@ def compute_statistics(ref_dir, est_dir, t_collar=0.5, ncpus=1):
         args.append([ref_event_list,
                      est_event_list,
                      ref,
-                     t_collar])
+                     t_collar,
+                     eval_onset,
+                     eval_offset])
 
     ref_labels = all_ref_events.unique_event_labels
     est_labels = all_est_events.unique_event_labels
