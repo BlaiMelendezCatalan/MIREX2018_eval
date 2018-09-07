@@ -73,8 +73,8 @@ Where:
 # Usage
     import segment_based_eval as S
     import event_based_eval as E
-    S.compute_statistics(est_dir='examples/est_dir/', ref_dir='examples/ref_dir/', ncpus=1)
-    E.compute_statistics(est_dir='examples/est_dir/', ref_dir='examples/ref_dir/', ncpus=1)
+    S.compute_statistics(est_dir='examples/est_dir/', ref_dir='examples/ref_dir/', audio_dir='/path/to/audio', ncpus=1)
+    E.compute_statistics(est_dir='examples/est_dir/', ref_dir='examples/ref_dir/', t_collar=<float>, eval_onset=<bool>, eval_offset=<bool>, ncpus=1)
 
 # Input
 The reference and estimation files of each audio file in the dataset must have the same name and adjust to the following format: each row should include the onset (seconds), offset (seconds) and the class of an event/segment separated by a tab. Rows should be ordered by onset time.

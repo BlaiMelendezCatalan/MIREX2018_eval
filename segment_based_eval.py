@@ -165,19 +165,27 @@ def fill_event_gaps(events, duration):
         return filled_events
     sorted_events = sorted(events)
     last_offset = 0.0
+    unannotated_segments = [[0.0, duration]]
     for i, e in enumerate(sorted_events):
-        if e.onset != last_offset:
-            filled_events.append(MetaDataItem({'onset': last_offset,
-                                               'offset': e.onset,
-                                               'event_label': '-'}))
+        for i, seg in enumerate(unannotated_segments):
+            if e.onset < seg[1] and e.offset > seg[0]:
+                if seg[0] >= e.onset and seg[1] <= e.offset:
+                    unannotated_segments.pop(i)
+                elif seg[0] >= e.onset:
+                    unannotated_segments[i][0] = e.offset
+                elif seg[1] <= e.offset:
+                    unannotated_segments[i][1] = e.onset
+                else:
+                    unannotated_segments.append([e.offset, seg[1]])
+                    unannotated_segments[i][1] = e.onset
         filled_events.append(MetaDataItem({'onset': e.onset,
                                            'offset': e.offset,
                                            'event_label': e.event_label}))
-        if i == len(sorted_events) - 1 and e.offset != duration:
-            filled_events.append(MetaDataItem({'onset': e.offset,
-                                               'offset': duration,
-                                               'event_label': '-'}))
-        last_offset = e.offset
+
+    for seg in unannotated_segments:
+        filled_events.append(MetaDataItem({'onset': seg[0],
+                                           'offset': seg[1],
+                                           'event_label': '-'}))
 
     return filled_events
 
@@ -218,6 +226,12 @@ def compute_statistics(ref_dir, est_dir, audio_dir, ncpus=1):
                      ref])
 
     ref_labels = all_ref_events.unique_event_labels
+    est_labels = all_est_events.unique_event_labels
+    if '-' in ref_labels and '-' not in est_labels:
+        est_labels.append('-')
+    if '-' in est_labels and '-' not in ref_labels:
+        ref_labels.append('-')
+    
     est_labels = all_est_events.unique_event_labels
 
     for l in est_labels:
