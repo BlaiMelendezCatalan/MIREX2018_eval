@@ -67,7 +67,7 @@ def compute_file_statistics(args):
         results[l]['precision'] = p
         results[l]['recall'] = r
         results[l]['f_measure'] = f
-    a = raw_res['overall']['accuracy']['accuracy']
+    a = seg_met.overall['Ntp'] / seg_met.overall['Nref']
     results['overall'] = {'accuracy': a}
 
     return (file_name, seg_met, results)
@@ -147,11 +147,7 @@ def get_dataset_stats(int_stats, label):
                                 precision=stats['precision'],
                                 recall=stats['recall'])
     else:
-        stats['accuracy'] = metric.accuracy(
-                                Ntp=int_stats['Ntp'],
-                                Ntn=int_stats['Ntn'],
-                                Nfp=int_stats['Nfp'],
-                                Nfn=int_stats['Nfn'])
+        stats['accuracy'] = int_stats['Ntp'] / int_stats['Nref']
 
     return stats
 
